@@ -23,6 +23,9 @@ use sp_std::prelude::*;
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
+// Add an administrative rule
+use frame_system::EnsureRoot;
+
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
 	construct_runtime, parameter_types,
@@ -157,6 +160,9 @@ parameter_types! {
 	pub BlockLength: frame_system::limits::BlockLength = frame_system::limits::BlockLength
 		::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
 	pub const SS58Prefix: u8 = 42;
+	// Implement the Config trait for the pallet
+	pub const MaxWellKnownNodes: u32 = 8;
+	pub const MaxPeerIdLength: u32 = 128;
 }
 
 // Configure FRAME pallets to include in runtime.
@@ -285,6 +291,18 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
+/// Configure the pallet-node-authorization
+impl pallet_node_authorization::Config for Runtime {
+	type Event = Event;
+	type MaxWellKnownNodes = MaxWellKnownNodes;
+	type MaxPeerIdLength = MaxPeerIdLength;
+	type AddOrigin = EnsureRoot<AccountId>;
+	type RemoveOrigin = EnsureRoot<AccountId>;
+	type SwapOrigin = EnsureRoot<AccountId>;
+	type ResetOrigin = EnsureRoot<AccountId>;
+	type WeightInfo = ();
+}
+
 impl pallet_nicks::Config for Runtime {
 	// The Balance pallet implements the Rese
 	// `Balances` is defined in `construct_run`
@@ -317,7 +335,7 @@ parameter_types! {
 	pub DeletionWeightLimit: Weight = AVERAGE_ON_INITIALIZE_RATIO * BlockWeights::get().max_block;
 	pub Schedule: pallet_contracts::Schedule<Runtime> = Default::default();
   }
-  
+
 impl pallet_contracts::Config for Runtime {
 type Time = Timestamp;
 type Randomness = RandomnessCollectiveFlip;
@@ -361,6 +379,8 @@ construct_runtime!(
 		TemplateModule: pallet_template,
 		Nicks: pallet_nicks,
 		Contracts: pallet_contracts,
+		// Add the pallet_node_authorization to the construct_runtime macro
+		NodeAuthorization: pallet_node_authorization::{Pallet, Call, Storage, Event<T>, Config<T>},
 	}
 );
 
@@ -620,7 +640,7 @@ impl_runtime_apis! {
 	) -> pallet_contracts_primitives::ContractExecResult<Balance> {
 		Contracts::bare_call(origin, dest, value, gas_limit, storage_deposit_limit, input_data, CONTRACTS_DEBUG_OUTPUT)
 	}
-	
+
 	fn instantiate(
 		origin: AccountId,
 		value: Balance,
@@ -632,7 +652,7 @@ impl_runtime_apis! {
 	) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId, Balance> {
 		Contracts::bare_instantiate(origin, value, gas_limit, storage_deposit_limit, code, data, salt, CONTRACTS_DEBUG_OUTPUT)
 		}
-		
+
 	fn upload_code(
 		origin: AccountId,
 		code: Vec<u8>,
@@ -640,7 +660,7 @@ impl_runtime_apis! {
 	) -> pallet_contracts_primitives::CodeUploadResult<Hash, Balance> {
 		Contracts::bare_upload_code(origin, code, storage_deposit_limit)
 	}
-	
+
 	fn get_storage(
 		address: AccountId,
 		key: Vec<u8>,
